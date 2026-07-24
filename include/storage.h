@@ -10,7 +10,7 @@
 class Storage {
 public:
     // dataDir 表示数据保存目录，默认保存到当前程序运行目录下的 data 文件夹
-    explicit Storage(const QString& dataDir = "./data");
+    explicit Storage(const QString& dataDir = "../data");
 
     // 初始化存储目录，如果 data 目录不存在则创建
     bool init();
