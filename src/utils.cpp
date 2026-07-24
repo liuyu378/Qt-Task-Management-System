@@ -1,7 +1,7 @@
 #include "utils.h"
 #include <QCryptographicHash>  // Qt 提供的加密哈希类，用于计算 SHA-256
 
-namespace Utils {
+namespace utils {
 
 QString sha256(const QString& input)
 {
@@ -28,4 +28,4 @@ QString trim(const QString& str)   //去掉字符串开头和结尾的空白字�
     return str.trimmed();
 }
 
-} //namespace Utils
+} //namespace utils
