@@ -22,6 +22,15 @@
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QJsonParseError>
+#include <QMetaObject>
+#include <QDebug>
+
+#include <chrono>
+#include <thread>
+#include <QSoundEffect>
+#include <QUrl>
+#include <QFileInfo>
+#include <QApplication>
 
 MainWindow::MainWindow(const QString& username, QWidget* parent)
     : QMainWindow(parent),
@@ -35,7 +44,8 @@ MainWindow::MainWindow(const QString& username, QWidget* parent)
       aboutButton_(nullptr),
       filterBox_(nullptr),
       userLabel_(nullptr),
-      reminderTimer_(nullptr)
+      reminderSound_(nullptr),
+      running_(false)
 {
     // 先从本地文件加载任务到 taskMgr_ 内存中
     // 这一步就是“用户登录后，从文件加载任务列表，保存到内存”
@@ -44,26 +54,44 @@ MainWindow::MainWindow(const QString& username, QWidget* parent)
     // 初始化主界面
     setupUiExtra();
 
+    // 初始化提醒音效
+    reminderSound_ = new QSoundEffect(this);
+
+    // 提醒音频文件路径
+    // 程序在 build 目录运行，所以 ../resources/reminder.wav 指向项目根目录下的 resources/reminder.wav
+    QString soundPath = "../resources/reminder_fixed.wav";
+
+    if (QFile::exists(soundPath)) {
+    reminderSound_->setSource(QUrl::fromLocalFile(soundPath));
+    reminderSound_->setLoopCount(1);
+    reminderSound_->setVolume(1.0);
+    qDebug() << "提醒音效已设置:" << reminderSound_->source();
+    }
+    else{qDebug() << "提醒音频文件不存在";}
     // 把内存中的任务显示到表格
     loadTasks();
+    
+    // 启动后台提醒线程
+    startReminderThread();
 
-    // 定时检查任务提醒
-    reminderTimer_ = new QTimer(this);
-    connect(reminderTimer_, &QTimer::timeout, this, &MainWindow::checkReminders);
-    reminderTimer_->start(60000);
+    // 程序进入主界面后立即检查一次提醒
+    checkReminders();
 }
 
 MainWindow::~MainWindow()
 {
     // 窗口销毁前再保存一次，防止数据丢失
     saveTasksToFile();
+
+    // 停止后台提醒线程
+    stopReminderThread();
 }
 
 // 获取当前用户的任务文件路径
 // 每个用户单独一个任务文件
 QString MainWindow::taskFilePath() const
 {
-    QDir dir("./data");
+    QDir dir("../data");
 
     // 如果 data 目录不存在，就创建
     if (!dir.exists()) {
@@ -387,6 +415,8 @@ void MainWindow::onEditTask()
             return;
         }
 
+	remindedTaskIds_.remove(oldTask.id);  // 若一个任务已经提醒过，编辑了新的提醒时间，后续还能再次提醒
+	
         // 每次编辑完成后，立即保存到文件
         saveTasksToFile();
 
@@ -407,6 +437,9 @@ void MainWindow::onDeleteTask()
 
     if (ret == QMessageBox::Yes) {
         if (taskMgr_.deleteTask(taskId)) {
+
+	remindedTaskIds_.remove(taskId);
+	
             // 每次删除完成后，立即保存到文件
             saveTasksToFile();
 
@@ -433,15 +466,38 @@ void MainWindow::checkReminders()
     QDateTime now = QDateTime::currentDateTime();
 
     for (const Task& task : tasks) {
-        if (task.reminderTime.isValid() &&
-            task.reminderTime <= now &&
-            task.startTime >= now) {
+        // 没有设置提醒时间，不提醒
+        if (!task.reminderTime.isValid()) {
+            continue;
+        }
+
+        // 已经提醒过的任务不重复提醒
+        if (remindedTaskIds_.contains(task.id)) {
+            continue;
+        }
+
+        // 到达提醒时间
+        if (task.reminderTime <= now) {
+            remindedTaskIds_.insert(task.id);
+
+            // 控制台打印提醒，满足“屏幕打印提醒”
+            qDebug() << "任务提醒："
+                     << "任务名称:" << task.name
+                     << "开始时间:" << task.startTime.toString("yyyy-MM-dd HH:mm")
+                     << "提醒时间:" << task.reminderTime.toString("yyyy-MM-dd HH:mm")
+                     << "优先级:" << task.priority
+                     << "分类:" << task.category;
+
+	    playReminderSound();
+
+            // 弹窗提醒
             QMessageBox::information(
                 this,
                 "任务提醒",
-                QString("任务：%1\n开始时间：%2\n优先级：%3\n分类：%4")
+                QString("任务：%1\n\n开始时间：%2\n提醒时间：%3\n优先级：%4\n分类：%5")
                     .arg(task.name)
                     .arg(task.startTime.toString("yyyy-MM-dd HH:mm"))
+                    .arg(task.reminderTime.toString("yyyy-MM-dd HH:mm"))
                     .arg(task.priority)
                     .arg(task.category)
             );
@@ -473,5 +529,62 @@ void MainWindow::onAbout()
 void MainWindow::closeEvent(QCloseEvent* event)
 {
     saveTasksToFile();
+    stopReminderThread();
     event->accept();
+}
+
+void MainWindow::startReminderThread()
+{
+    // 防止重复启动线程
+    if (running_) {
+        return;
+    }
+
+    running_ = true;
+
+    reminderThread_ = std::thread([this]() {
+        while (running_) {
+            // 每 30 秒检查一次
+            // 拆成 30 次 1 秒，是为了关闭窗口时线程能更快退出
+            for (int i = 0; i < 30 && running_; ++i) {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            }
+
+            if (!running_) {
+                break;
+            }
+
+            // 注意：
+            // 后台线程不能直接操作 Qt 界面。
+            // QMessageBox 必须在主线程中弹出。
+            // 所以这里把 checkReminders 投递回 Qt 主线程执行。
+            QMetaObject::invokeMethod(
+                this,
+                "checkReminders",
+                Qt::QueuedConnection
+            );
+        }
+    });
+}
+
+void MainWindow::stopReminderThread()
+{
+    // 通知线程停止
+    running_ = false;
+
+    // 等待线程结束
+    if (reminderThread_.joinable()) {
+        reminderThread_.join();
+    }
+}
+
+void MainWindow::playReminderSound()
+{
+    if (reminderSound_ && reminderSound_->source().isValid()) {
+	qDebug() << "播放提醒音效";
+        reminderSound_->play();
+    } else {
+        // 如果没有找到音频文件，就使用系统提示音兜底
+        QApplication::beep();
+    }
 }
