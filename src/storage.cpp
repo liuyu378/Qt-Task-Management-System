@@ -34,13 +34,13 @@ bool Storage::saveUsers(const UserManager& um)
     return um.saveToFile(getUserFilePath());
 }
 
-bool Storage::loadTasks(const QString& username, UserManager& tm)
+bool Storage::loadTasks(const QString& username, TaskManager& tm)
 {
     // 每个用户使用独立任务文件
     return tm.loadFromFile(getTaskFilePath(username));
 }
 
-bool Storage::saveTasks(const QString& username, const UserManager& tm)
+bool Storage::saveTasks(const QString& username, const TaskManager& tm)
 {
     // 将该用户的任务保存到对应文件
     return tm.saveToFile(getTaskFilePath(username));

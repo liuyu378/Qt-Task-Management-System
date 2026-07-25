@@ -9,6 +9,7 @@
 #include <thread>
 #include <atomic>
 #include <QSet>
+#include "storage.h"
 
 class QTableWidget;
 class QPushButton;
@@ -21,14 +22,14 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit MainWindow(const QString& username, QWidget* parent = nullptr);
+    explicit MainWindow(const QString& username, QWidget* parent = nullptr);    //构造函数
     ~MainWindow();
 
 private slots:
     void onAddTask();
     void onEditTask();
     void onDeleteTask();
-    void onRefresh();
+    void onRefresh();          // 刷新任务列表：重新根据筛选条件显示任务
     void onFilterChanged();    // 筛选条件变化槽函数：当筛选下拉框变化时重新加载任务列表
     void checkReminders();     // 任务提醒检查槽函数：由后台线程定时触发，检查是否有到点提醒的任务
     void onLogout();
@@ -38,19 +39,10 @@ protected:
     void closeEvent(QCloseEvent* event) override;    // 窗口关闭事件：关闭窗口前保存任务
 
 private:
-    void setupUiExtra();
+    void setupUiExtra();    // 初始化主窗口界面控件和信号槽连接
     void loadTasks();
-    void refreshTable(const QVector<Task>& tasks);
-    int currentSelectedTaskId() const;
-
-    // 获取当前用户的任务文件路径
-    QString taskFilePath() const;
-
-    // 程序进入主界面时，从文件加载任务到内存
-    bool loadTasksFromFile();
-
-    // 添加 / 编辑 / 删除任务后，自动保存任务到文件
-    bool saveTasksToFile() const;
+    void refreshTable(const QVector<Task>& tasks);   // 将任务数据显示到 QTableWidget 表格中
+    int currentSelectedTaskId() const;     // 获取当前表格选中行的任务 ID
 
     // 启动后台提醒线程
     void startReminderThread();
@@ -82,6 +74,8 @@ private:
 
     // 提醒音效对象
     QSoundEffect* reminderSound_;
+
+    Storage storage_;
 };
 
 #endif // MAINWINDOW_H

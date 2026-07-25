@@ -24,6 +24,14 @@ public:
     // 获取所有任务
     QVector<Task> getAllTasks() const;
 
+    // 清空当前内存中的任务列表
+    void clear();
+
+    // 从文件加载任务数据
+    bool loadFromFile(const QString& filename);
+
+    // 保存任务数据到文件
+    bool saveToFile(const QString& filename) const;
 private:
     // 生成下一个任务 id
     int generateNextId() const;

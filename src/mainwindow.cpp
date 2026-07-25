@@ -15,13 +15,6 @@
 #include <QAbstractItemView>
 #include <QDate>
 #include <QDateTime>
-#include <QFile>
-#include <QDir>
-#include <QByteArray>
-#include <QJsonArray>
-#include <QJsonObject>
-#include <QJsonDocument>
-#include <QJsonParseError>
 #include <QMetaObject>
 #include <QDebug>
 
@@ -49,7 +42,8 @@ MainWindow::MainWindow(const QString& username, QWidget* parent)
 {
     // 先从本地文件加载任务到 taskMgr_ 内存中
     // 这一步就是“用户登录后，从文件加载任务列表，保存到内存”
-    loadTasksFromFile();
+    storage_.init();
+    storage_.loadTasks(username_, taskMgr_);
 
     // 初始化主界面
     setupUiExtra();
@@ -81,132 +75,10 @@ MainWindow::MainWindow(const QString& username, QWidget* parent)
 MainWindow::~MainWindow()
 {
     // 窗口销毁前再保存一次，防止数据丢失
-    saveTasksToFile();
+    storage_.saveTasks(username_, taskMgr_);
 
     // 停止后台提醒线程
     stopReminderThread();
-}
-
-// 获取当前用户的任务文件路径
-// 每个用户单独一个任务文件
-QString MainWindow::taskFilePath() const
-{
-    QDir dir("../data");
-
-    // 如果 data 目录不存在，就创建
-    if (!dir.exists()) {
-        dir.mkpath(".");
-    }
-
-    // 用户名可能包含空格、中文或特殊字符
-    // 所以用 Base64Url 编码成安全文件名
-    QByteArray encoded = username_.toUtf8().toBase64(
-        QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals
-    );
-
-    QString safeUsername = QString::fromLatin1(encoded);
-
-    return dir.filePath("tasks_" + safeUsername + ".dat");
-}
-
-// 从本地文件加载任务
-bool MainWindow::loadTasksFromFile()
-{
-    QFile file(taskFilePath());
-
-    // 文件不存在说明该用户还没有任务，不算错误
-    if (!file.exists()) {
-        return true;
-    }
-
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return false;
-    }
-
-    QByteArray data = file.readAll();
-    file.close();
-
-    QJsonParseError error;
-    QJsonDocument doc = QJsonDocument::fromJson(data, &error);
-
-    if (error.error != QJsonParseError::NoError || !doc.isArray()) {
-        return false;
-    }
-
-    QJsonArray array = doc.array();
-
-    for (const QJsonValue& value : array) {
-        if (!value.isObject()) {
-            continue;
-        }
-
-        QJsonObject obj = value.toObject();
-
-        Task task;
-
-        task.id = obj.value("id").toInt();
-        task.name = obj.value("name").toString();
-        task.startTime = QDateTime::fromString(
-            obj.value("startTime").toString(),
-            Qt::ISODate
-        );
-        task.priority = obj.value("priority").toString("中");
-        task.category = obj.value("category").toString("生活");
-
-        QString reminderText = obj.value("reminderTime").toString();
-        if (!reminderText.isEmpty()) {
-            task.reminderTime = QDateTime::fromString(reminderText, Qt::ISODate);
-        }
-
-        task.owner = obj.value("owner").toString();
-
-        // 只加载当前用户自己的任务
-        if (task.owner == username_) {
-            taskMgr_.addTask(task);
-        }
-    }
-
-    return true;
-}
-
-// 保存当前用户任务到本地文件
-bool MainWindow::saveTasksToFile() const
-{
-    QFile file(taskFilePath());
-
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        return false;
-    }
-
-    QJsonArray array;
-
-    QVector<Task> tasks = taskMgr_.getTasksByUser(username_);
-
-    for (const Task& task : tasks) {
-        QJsonObject obj;
-
-        obj["id"] = task.id;
-        obj["name"] = task.name;
-        obj["startTime"] = task.startTime.toString(Qt::ISODate);
-        obj["priority"] = task.priority;
-        obj["category"] = task.category;
-
-        if (task.reminderTime.isValid()) {
-            obj["reminderTime"] = task.reminderTime.toString(Qt::ISODate);
-        } else {
-            obj["reminderTime"] = "";
-        }
-
-        obj["owner"] = task.owner;
-
-        array.append(obj);
-    }
-
-    QJsonDocument doc(array);
-    file.write(doc.toJson(QJsonDocument::Indented));
-    file.close();
-
-    return true;
 }
 
 void MainWindow::setupUiExtra()
@@ -362,7 +234,7 @@ void MainWindow::onAddTask()
 
         if (taskMgr_.addTask(task)) {
             // 每添加一个任务，立即保存到文件
-            saveTasksToFile();
+            storage_.saveTasks(username_, taskMgr_);
 
             loadTasks();
         } else {
@@ -418,7 +290,7 @@ void MainWindow::onEditTask()
 	remindedTaskIds_.remove(oldTask.id);  // 若一个任务已经提醒过，编辑了新的提醒时间，后续还能再次提醒
 	
         // 每次编辑完成后，立即保存到文件
-        saveTasksToFile();
+        storage_.saveTasks(username_, taskMgr_);
 
         loadTasks();
     }
@@ -441,7 +313,7 @@ void MainWindow::onDeleteTask()
 	remindedTaskIds_.remove(taskId);
 	
             // 每次删除完成后，立即保存到文件
-            saveTasksToFile();
+            storage_.saveTasks(username_, taskMgr_);
 
             loadTasks();
         } else {
@@ -507,7 +379,7 @@ void MainWindow::checkReminders()
 
 void MainWindow::onLogout()
 {
-    saveTasksToFile();
+    storage_.saveTasks(username_, taskMgr_);
     close();
 }
 
@@ -528,7 +400,7 @@ void MainWindow::onAbout()
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
-    saveTasksToFile();
+    storage_.saveTasks(username_, taskMgr_);
     stopReminderThread();
     event->accept();
 }

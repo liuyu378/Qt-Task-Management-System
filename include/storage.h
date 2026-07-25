@@ -20,8 +20,8 @@ public:
     bool saveUsers(const UserManager& um);
 
     // 加载 / 保存某个用户的任务信息
-    bool loadTasks(const QString& username, UserManager& tm);
-    bool saveTasks(const QString& username, const UserManager& tm);
+    bool loadTasks(const QString& username, TaskManager& tm);
+    bool saveTasks(const QString& username, const TaskManager& tm);
 
 private:
     // 获取用户数据文件路径，例如：./data/users.dat

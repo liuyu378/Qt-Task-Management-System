@@ -12,6 +12,8 @@
 #include <QMessageBox>
 #include <QRegularExpression>
 
+// 构造函数
+// 创建任务名称、开始时间、优先级、分类、提醒时间等
 TaskDialog::TaskDialog(QWidget* parent)
     : QDialog(parent),
       taskId_(0)
@@ -30,12 +32,14 @@ TaskDialog::TaskDialog(QWidget* parent)
     priorityBox_->addItem("低");
     priorityBox_->addItem("中");
     priorityBox_->addItem("高");
+    priorityBox_->setCurrentText("中");
 
     categoryBox_ = new QComboBox(this);
     categoryBox_->addItem("生活");
     categoryBox_->addItem("学习");
     categoryBox_->addItem("工作");
     categoryBox_->addItem("其他");
+    categoryBox_->setCurrentText("生活");
 
     reminderTimeEdit_ = new QDateTimeEdit(this);
     reminderTimeEdit_->setCalendarPopup(true);
@@ -68,6 +72,8 @@ TaskDialog::TaskDialog(QWidget* parent)
     connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
 }
 
+// 将已有任务信息填入对话框
+// 用于编辑任务时显示原任务内容
 void TaskDialog::setTask(const Task& task)
 {
     taskId_ = task.id;
@@ -80,6 +86,7 @@ void TaskDialog::setTask(const Task& task)
     reminderTimeEdit_->setDateTime(task.reminderTime);
 }
 
+// 从对话框控件中读取用户输入，组装成 Task 对象
 Task TaskDialog::getTask() const
 {
     Task task;
@@ -95,6 +102,7 @@ Task TaskDialog::getTask() const
     return task;
 }
 
+// 语音识别函数
 void TaskDialog::onVoiceInput()
 {
     voiceButton_->setEnabled(false);

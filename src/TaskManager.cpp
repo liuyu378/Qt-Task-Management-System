@@ -1,4 +1,9 @@
 #include "TaskManager.h"
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QJsonParseError>
 
 // 构造函数
 TaskManager::TaskManager()
@@ -105,4 +110,107 @@ bool TaskManager::isDuplicateTask(const Task& task) const
     }
 
     return false;
+}
+
+void TaskManager::clear()
+{
+    tasks_.clear();
+}
+
+bool TaskManager::loadFromFile(const QString& filename)
+{
+    QFile file(filename);
+
+    // 文件不存在说明当前用户还没有任务，不算错误
+    if (!file.exists()) {
+        return true;
+    }
+
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return false;
+    }
+
+    QByteArray data = file.readAll();
+    file.close();
+
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &error);
+
+    if (error.error != QJsonParseError::NoError || !doc.isArray()) {
+        return false;
+    }
+
+    QVector<Task> loadedTasks;
+    QJsonArray array = doc.array();
+
+    for (const QJsonValue& value : array) {
+        if (!value.isObject()) {
+            continue;
+        }
+
+        QJsonObject obj = value.toObject();
+
+        Task task;
+        task.id = obj.value("id").toInt();
+        task.name = obj.value("name").toString();
+
+        task.startTime = QDateTime::fromString(
+            obj.value("startTime").toString(),
+            Qt::ISODate
+        );
+
+        task.priority = obj.value("priority").toString("中");
+        task.category = obj.value("category").toString("生活");
+
+        QString reminderText = obj.value("reminderTime").toString();
+        if (!reminderText.isEmpty()) {
+            task.reminderTime = QDateTime::fromString(reminderText, Qt::ISODate);
+        }
+
+        task.owner = obj.value("owner").toString();
+
+        if (!task.name.trimmed().isEmpty() && !task.owner.trimmed().isEmpty()) {
+            loadedTasks.append(task);
+        }
+    }
+
+    tasks_ = loadedTasks;
+    return true;
+}
+
+bool TaskManager::saveToFile(const QString& filename) const
+{
+    QFile file(filename);
+
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return false;
+    }
+
+    QJsonArray array;
+
+    for (const Task& task : tasks_) {
+        QJsonObject obj;
+
+        obj["id"] = task.id;
+        obj["name"] = task.name;
+        obj["startTime"] = task.startTime.toString(Qt::ISODate);
+        obj["priority"] = task.priority;
+        obj["category"] = task.category;
+
+        if (task.reminderTime.isValid()) {
+            obj["reminderTime"] = task.reminderTime.toString(Qt::ISODate);
+        } else {
+            obj["reminderTime"] = "";
+        }
+
+        obj["owner"] = task.owner;
+
+        array.append(obj);
+    }
+
+    QJsonDocument doc(array);
+    file.write(doc.toJson(QJsonDocument::Indented));
+    file.close();
+
+    return true;
 }
