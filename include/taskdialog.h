@@ -7,7 +7,7 @@
 class QLineEdit;
 class QDateTimeEdit;
 class QComboBox;
-
+class QPushButton;
 class TaskDialog : public QDialog
 {
     Q_OBJECT
@@ -17,14 +17,18 @@ public:
 
     void setTask(const Task& task);
     Task getTask() const;
-
+private slots:
+	void onVoiceInput();   // 点击"语音录入"按钮后调用
 private:
+    void applyVoiceText(const QString& text);
+
     QLineEdit* nameEdit_;
     QDateTimeEdit* startTimeEdit_;
     QComboBox* priorityBox_;
     QComboBox* categoryBox_;
     QDateTimeEdit* reminderTimeEdit_;
-
+    
+    QPushButton* voiceButton_;   //语音录入按钮
     int taskId_;
     QString owner_;
 };
