@@ -37,7 +37,7 @@ TaskDialog::TaskDialog(QWidget* parent)
     categoryBox_ = new QComboBox(this);
     categoryBox_->addItem("生活");
     categoryBox_->addItem("学习");
-    categoryBox_->addItem("工作");
+    categoryBox_->addItem("娱乐");
     categoryBox_->addItem("其他");
     categoryBox_->setCurrentText("生活");
 
@@ -163,8 +163,8 @@ void TaskDialog::applyVoiceText(const QString& text)
     // 解析小时
     int hour = -1;
 
-    if (text.contains("一点")) hour = 1;
-    else if (text.contains("两点") || text.contains("二点")) hour = 2;
+    if (text.contains("十一点")) hour = 11;
+    else if (text.contains("十二点")) hour = 12;
     else if (text.contains("三点")) hour = 3;
     else if (text.contains("四点")) hour = 4;
     else if (text.contains("五点")) hour = 5;
@@ -173,8 +173,8 @@ void TaskDialog::applyVoiceText(const QString& text)
     else if (text.contains("八点")) hour = 8;
     else if (text.contains("九点")) hour = 9;
     else if (text.contains("十点")) hour = 10;
-    else if (text.contains("十一点")) hour = 11;
-    else if (text.contains("十二点")) hour = 12;
+    else if (text.contains("一点")) hour = 1;
+    else if (text.contains("两点") || text.contains("二点")) hour = 2;
 
     // 下午 / 晚上自动加 12 小时
     if (hour > 0 && (text.contains("下午") || text.contains("晚上"))) {

@@ -6,7 +6,6 @@
 #include <QPushButton>
 #include <QComboBox>
 #include <QLabel>
-#include <QTimer>
 #include <QMessageBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -74,9 +73,6 @@ MainWindow::MainWindow(const QString& username, QWidget* parent)
 
 MainWindow::~MainWindow()
 {
-    // 窗口销毁前再保存一次，防止数据丢失
-    storage_.saveTasks(username_, taskMgr_);
-
     // 停止后台提醒线程
     stopReminderThread();
 }

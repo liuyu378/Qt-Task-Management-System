@@ -34,7 +34,6 @@ private slots:
     void checkReminders();     // 任务提醒检查槽函数：由后台线程定时触发，检查是否有到点提醒的任务
     void onLogout();
     void onAbout();    // 显示软件版本和功能说明
-    void playReminderSound();   // 播放任务提醒声音
 protected:
     void closeEvent(QCloseEvent* event) override;    // 窗口关闭事件：关闭窗口前保存任务
 
@@ -49,6 +48,7 @@ private:
 
     // 停止后台提醒线程
     void stopReminderThread();
+    void playReminderSound();   // 播放任务提醒声音
 private:
     QString username_;
     TaskManager taskMgr_;
