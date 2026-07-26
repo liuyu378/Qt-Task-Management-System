@@ -97,7 +97,7 @@ void MainWindow::setupUiExtra()
     deleteButton_ = new QPushButton("删除任务", this);
     refreshButton_ = new QPushButton("刷新", this);
     aboutButton_ = new QPushButton("关于", this);
-    logoutButton_ = new QPushButton("退出", this);
+    logoutButton_ = new QPushButton("退出登录", this);
 
     table_ = new QTableWidget(this);
     table_->setColumnCount(6);
@@ -388,8 +388,21 @@ void MainWindow::checkReminders()
 
 void MainWindow::onLogout()
 {
-    storage_.saveTasks(username_, taskMgr_);
-    close();
+    auto reply = QMessageBox::question(
+        this,
+        "退出登录",
+        "确定要退出当前用户并返回登录界面吗？",
+        QMessageBox::Yes | QMessageBox::No
+    );
+
+    if (reply == QMessageBox::Yes) {
+        storage_.saveTasks(username_, taskMgr_);
+
+        // 通知 main.cpp：用户选择了注销
+        emit logoutRequested();
+
+        close();
+    }
 }
 
 void MainWindow::onAbout()

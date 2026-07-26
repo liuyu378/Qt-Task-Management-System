@@ -24,6 +24,8 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(const QString& username, QWidget* parent = nullptr);    //构造函数
     ~MainWindow();
+signals:
+    void logoutRequested();
 
 private slots:
     void onAddTask();
