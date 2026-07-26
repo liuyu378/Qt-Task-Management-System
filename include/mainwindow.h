@@ -43,6 +43,9 @@ private:
     void refreshTable(const QVector<Task>& tasks);   // 将任务数据显示到 QTableWidget 表格中
     int currentSelectedTaskId() const;     // 获取当前表格选中行的任务 ID
 
+    // 在界面层检查任务是否违反规则
+    // ignoreTaskId 用于编辑任务时忽略当前任务自身
+    bool validateTaskForUi(const Task& task, int ignoreTaskId, QString& errorMessage) const;
     // 启动后台提醒线程
     void startReminderThread();
 

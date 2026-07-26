@@ -19,6 +19,7 @@ public:
     Task getTask() const;
 private slots:
 	void onVoiceInput();   // 点击"语音录入"按钮后调用
+	void onAcceptClicked();    // 点击确定按钮后，先检查输入是否合法
 private:
     void applyVoiceText(const QString& text);
 

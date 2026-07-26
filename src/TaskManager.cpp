@@ -101,6 +101,16 @@ int TaskManager::generateNextId() const
 bool TaskManager::isDuplicateTask(const Task& task) const
 {
     for (const Task& existingTask : tasks_) {
+        // 只检查同一个用户的任务
+	if(existingTask.owner != task.owner){
+		continue;
+	}
+
+	// 任务开始时间不能相同
+	if(existingTask.startTime == task.startTime){
+		return true;
+	}
+
         // 同一个用户、同一个任务名、同一个开始时间，就是重复任务
         if (existingTask.owner == task.owner &&
             existingTask.name == task.name &&

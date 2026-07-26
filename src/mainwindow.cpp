@@ -226,15 +226,21 @@ void MainWindow::onAddTask()
 
     if (dlg.exec() == QDialog::Accepted) {
         Task task = dlg.getTask();
+
         task.owner = username_;
 
-        if (taskMgr_.addTask(task)) {
-            // 每添加一个任务，立即保存到文件
-            storage_.saveTasks(username_, taskMgr_);
+        QString errorMessage;
+        if (!validateTaskForUi(task, -1, errorMessage)) {
+            QMessageBox::warning(this, "添加失败", errorMessage);
+            return;
+        }
 
+        if (taskMgr_.addTask(task)) {
+            storage_.saveTasks(username_, taskMgr_);
             loadTasks();
+            QMessageBox::information(this, "成功", "任务添加成功！");
         } else {
-            QMessageBox::warning(this, "添加失败", "任务名称不能为空，或者任务重复。");
+            QMessageBox::warning(this, "添加失败", "任务添加失败，请检查任务信息是否重复。");
         }
     }
 }
@@ -272,25 +278,32 @@ void MainWindow::onEditTask()
     if (dlg.exec() == QDialog::Accepted) {
         Task newTask = dlg.getTask();
 
-        newTask.id = oldTask.id;
-        newTask.owner = username_;
+	newTask.id = oldTask.id;
+	newTask.owner = username_;
 
-        taskMgr_.deleteTask(oldTask.id);
+	QString errorMessage;
+	if (!validateTaskForUi(newTask, oldTask.id, errorMessage)) {
+	    QMessageBox::warning(this, "修改失败", errorMessage);
+	    return;
+	}
 
-        if (!taskMgr_.addTask(newTask)) {
-            taskMgr_.addTask(oldTask);
-            QMessageBox::warning(this, "修改失败", "任务名称不能为空，或者任务重复。");
-            return;
-        }
+	taskMgr_.deleteTask(oldTask.id);
 
-	remindedTaskIds_.remove(oldTask.id);  // 若一个任务已经提醒过，编辑了新的提醒时间，后续还能再次提醒
+	if (!taskMgr_.addTask(newTask)) {
+	    taskMgr_.addTask(oldTask);
+	    QMessageBox::warning(this, "修改失败", "任务修改失败，请检查任务信息。");
+	    return;
+	}
 	
-        // 每次编辑完成后，立即保存到文件
-        storage_.saveTasks(username_, taskMgr_);
+	remindedTaskIds_.remove(oldTask.id);    // 若一个任务已经提醒过，编辑了新的提醒时间，后续还能再次提醒
 
-        loadTasks();
+	// 每次编辑完成后，立即保存到文件
+	storage_.saveTasks(username_, taskMgr_);
+	
+	loadTasks();
+	}
     }
-}
+
 
 void MainWindow::onDeleteTask()
 {
@@ -455,4 +468,44 @@ void MainWindow::playReminderSound()
         // 如果没有找到音频文件，就使用系统提示音兜底
         QApplication::beep();
     }
+}
+
+bool MainWindow::validateTaskForUi(const Task& task, int ignoreTaskId, QString& errorMessage) const
+{
+    if (task.name.trimmed().isEmpty()) {
+        errorMessage = "任务名称不能为空！";
+        return false;
+    }
+
+    if (!task.startTime.isValid()) {
+        errorMessage = "开始时间无效！";
+        return false;
+    }
+
+    QVector<Task> tasks = taskMgr_.getTasksByUser(username_);
+
+    for (const Task& existingTask : tasks) {
+        // 编辑任务时，跳过当前任务自身
+        if (existingTask.id == ignoreTaskId) {
+            continue;
+        }
+
+	QString existingStart = existingTask.startTime.toString("yyyy-MM-dd HH:mm");
+	QString newStart = task.startTime.toString("yyyy-MM-dd HH:mm");
+        // 规则 1：同一用户下，开始时间不能重复
+        if (existingStart == newStart) {
+            errorMessage = QString("已有任务使用相同开始时间：%1")
+                .arg(task.startTime.toString("yyyy-MM-dd HH:mm"));
+            return false;
+        }
+
+        // 规则 2：任务名称 + 开始时间不能重复
+        if (existingTask.name == task.name &&
+            existingStart == newStart) {
+            errorMessage = "任务名称和开始时间不能与已有任务重复！";
+            return false;
+        }
+    }
+
+    return true;
 }

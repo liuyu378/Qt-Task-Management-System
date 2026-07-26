@@ -68,7 +68,7 @@ TaskDialog::TaskDialog(QWidget* parent)
     mainLayout->addLayout(buttonLayout);
     
     connect(voiceButton_,&QPushButton::clicked,this,&TaskDialog::onVoiceInput);
-    connect(okButton, &QPushButton::clicked, this, &QDialog::accept);
+    connect(okButton, &QPushButton::clicked, this, &TaskDialog::onAcceptClicked);
     connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
 }
 
@@ -93,11 +93,26 @@ Task TaskDialog::getTask() const
 
     task.id = taskId_;
     task.owner = owner_;
-    task.name = nameEdit_->text();
-    task.startTime = startTimeEdit_->dateTime();
+    task.name = nameEdit_->text().trimmed();
+
+    // 开始时间统一精确到分钟，秒和毫秒清零
+    QDateTime startDateTime = startTimeEdit_->dateTime();
+    QTime startTime(startDateTime.time().hour(),
+                    startDateTime.time().minute(),
+                    0);
+    startDateTime.setTime(startTime);
+    task.startTime = startDateTime;
+
     task.priority = priorityBox_->currentText();
     task.category = categoryBox_->currentText();
-    task.reminderTime = reminderTimeEdit_->dateTime();
+
+    // 提醒时间也统一精确到分钟
+    QDateTime reminderDateTime = reminderTimeEdit_->dateTime();
+    QTime reminderTime(reminderDateTime.time().hour(),
+                       reminderDateTime.time().minute(),
+                       0);
+    reminderDateTime.setTime(reminderTime);
+    task.reminderTime = reminderDateTime;
 
     return task;
 }
@@ -236,4 +251,21 @@ void TaskDialog::applyVoiceText(const QString& text)
     } else {
         priorityBox_->setCurrentText("中");
     }
+}
+
+void TaskDialog::onAcceptClicked()
+{
+    QString taskName = nameEdit_->text().trimmed();
+
+    if (taskName.isEmpty()) {
+        QMessageBox::warning(this, "输入错误", "任务名称不能为空！");
+        return;
+    }
+
+    if (!startTimeEdit_->dateTime().isValid()) {
+        QMessageBox::warning(this, "输入错误", "开始时间无效！");
+        return;
+    }
+
+    accept();
 }
