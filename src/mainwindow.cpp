@@ -5,6 +5,7 @@
 #include <QTableWidgetItem>
 #include <QPushButton>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QLabel>
 #include <QMessageBox>
 #include <QVBoxLayout>
@@ -16,16 +17,19 @@
 #include <QDateTime>
 #include <QMetaObject>
 #include <QDebug>
+#include <QSoundEffect>
+#include <QUrl>
+#include <QFile>
+#include <QFileInfo>
+#include <QApplication>
 
 #include <chrono>
 #include <thread>
-#include <QSoundEffect>
-#include <QUrl>
-#include <QFileInfo>
-#include <QApplication>
-#include <QCheckBox>
 #include <algorithm>
 
+
+// 主窗口构造函数
+// username 是登录成功后传入的当前用户名
 MainWindow::MainWindow(const QString& username, QWidget* parent)
     : QMainWindow(parent),
       username_(username),
@@ -42,44 +46,54 @@ MainWindow::MainWindow(const QString& username, QWidget* parent)
       reminderSound_(nullptr),
       running_(false)
 {
-    // 先从本地文件加载任务到 taskMgr_ 内存中
-    // 这一步就是“用户登录后，从文件加载任务列表，保存到内存”
+    // 初始化 data 目录
     storage_.init();
+
+    // 用户登录后，从本地文件加载该用户任务到 TaskManager 内存中
     storage_.loadTasks(username_, taskMgr_);
 
-    // 初始化主界面
+    // 初始化主界面控件和信号槽
     setupUiExtra();
 
     // 初始化提醒音效
     reminderSound_ = new QSoundEffect(this);
 
-    // 提醒音频文件路径
-    // 程序在 build 目录运行，所以 ../resources/reminder.wav 指向项目根目录下的 resources/reminder.wav
+    // 程序一般在 build 目录运行
+    // ../resources/reminder_fixed.wav 指向项目根目录下的 resources/reminder_fixed.wav
     QString soundPath = "../resources/reminder_fixed.wav";
 
     if (QFile::exists(soundPath)) {
-    reminderSound_->setSource(QUrl::fromLocalFile(soundPath));
-    reminderSound_->setLoopCount(1);
-    reminderSound_->setVolume(1.0);
-    qDebug() << "提醒音效已设置:" << reminderSound_->source();
+        QString absolutePath = QFileInfo(soundPath).absoluteFilePath();
+
+        reminderSound_->setSource(QUrl::fromLocalFile(absolutePath));
+        reminderSound_->setLoopCount(1);
+        reminderSound_->setVolume(1.0);
+
+        qDebug() << "提醒音效已设置:" << reminderSound_->source();
+    } else {
+        qDebug() << "提醒音频文件不存在:" << soundPath;
     }
-    else{qDebug() << "提醒音频文件不存在";}
-    // 把内存中的任务显示到表格
+
+    // 将内存中的任务显示到表格
     loadTasks();
-    
+
     // 启动后台提醒线程
     startReminderThread();
 
-    // 程序进入主界面后立即检查一次提醒
+    // 进入主界面后立即检查一次提醒
     checkReminders();
 }
 
+
+// 析构函数
 MainWindow::~MainWindow()
 {
     // 停止后台提醒线程
     stopReminderThread();
 }
 
+
+// 初始化主窗口界面
 void MainWindow::setupUiExtra()
 {
     setWindowTitle("MySchedule - " + username_);
@@ -88,15 +102,20 @@ void MainWindow::setupUiExtra()
     QWidget* central = new QWidget(this);
     setCentralWidget(central);
 
+    // 当前用户显示
     userLabel_ = new QLabel("当前用户：" + username_, this);
 
+    // 筛选下拉框
     filterBox_ = new QComboBox(this);
     filterBox_->addItem("全部任务");
     filterBox_->addItem("今日任务");
     filterBox_->addItem("本月任务");
-    sortCheckBox_ = new QCheckBox("按开始时间排序", this);
-    sortCheckBox_->setChecked(false);   // 默认不排序，保持添加顺序
 
+    // 是否按开始时间排序
+    sortCheckBox_ = new QCheckBox("按开始时间排序", this);
+    sortCheckBox_->setChecked(false);
+
+    // 功能按钮
     addButton_ = new QPushButton("添加任务", this);
     editButton_ = new QPushButton("编辑任务", this);
     deleteButton_ = new QPushButton("删除任务", this);
@@ -104,6 +123,7 @@ void MainWindow::setupUiExtra()
     aboutButton_ = new QPushButton("关于", this);
     logoutButton_ = new QPushButton("退出登录", this);
 
+    // 任务表格
     table_ = new QTableWidget(this);
     table_->setColumnCount(6);
     table_->setHorizontalHeaderLabels(
@@ -117,6 +137,7 @@ void MainWindow::setupUiExtra()
     table_->setAlternatingRowColors(true);
     table_->verticalHeader()->setVisible(false);
 
+    // 顶部区域：当前用户 + 筛选 + 排序
     QHBoxLayout* topLayout = new QHBoxLayout;
     topLayout->addWidget(userLabel_);
     topLayout->addStretch();
@@ -124,6 +145,7 @@ void MainWindow::setupUiExtra()
     topLayout->addWidget(filterBox_);
     topLayout->addWidget(sortCheckBox_);
 
+    // 底部按钮区域
     QHBoxLayout* buttonLayout = new QHBoxLayout;
     buttonLayout->addWidget(addButton_);
     buttonLayout->addWidget(editButton_);
@@ -133,21 +155,42 @@ void MainWindow::setupUiExtra()
     buttonLayout->addWidget(aboutButton_);
     buttonLayout->addWidget(logoutButton_);
 
+    // 主布局
     QVBoxLayout* mainLayout = new QVBoxLayout(central);
     mainLayout->addLayout(topLayout);
     mainLayout->addWidget(table_);
     mainLayout->addLayout(buttonLayout);
 
-    connect(addButton_, &QPushButton::clicked, this, &MainWindow::onAddTask);
-    connect(editButton_, &QPushButton::clicked, this, &MainWindow::onEditTask);
-    connect(deleteButton_, &QPushButton::clicked, this, &MainWindow::onDeleteTask);
-    connect(refreshButton_, &QPushButton::clicked, this, &MainWindow::onRefresh);
-    connect(logoutButton_, &QPushButton::clicked, this, &MainWindow::onLogout);
-    connect(aboutButton_, &QPushButton::clicked, this, &MainWindow::onAbout);
-    connect(sortCheckBox_, &QCheckBox::toggled,this, &MainWindow::onFilterChanged);
-    connect(filterBox_,&QComboBox::currentIndexChanged,this,&MainWindow::onFilterChanged);
+    // 信号槽连接
+    connect(addButton_, &QPushButton::clicked,
+            this, &MainWindow::onAddTask);
+
+    connect(editButton_, &QPushButton::clicked,
+            this, &MainWindow::onEditTask);
+
+    connect(deleteButton_, &QPushButton::clicked,
+            this, &MainWindow::onDeleteTask);
+
+    connect(refreshButton_, &QPushButton::clicked,
+            this, &MainWindow::onRefresh);
+
+    connect(logoutButton_, &QPushButton::clicked,
+            this, &MainWindow::onLogout);
+
+    connect(aboutButton_, &QPushButton::clicked,
+            this, &MainWindow::onAbout);
+
+    connect(filterBox_,
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this,
+            &MainWindow::onFilterChanged);
+
+    connect(sortCheckBox_, &QCheckBox::toggled,
+            this, &MainWindow::onFilterChanged);
 }
 
+
+// 根据筛选条件刷新任务列表
 void MainWindow::loadTasks()
 {
     QVector<Task> allTasks = taskMgr_.getTasksByUser(username_);
@@ -158,19 +201,26 @@ void MainWindow::loadTasks()
 
     for (const Task& task : allTasks) {
         if (filterIndex == 0) {
+            // 全部任务
             result.append(task);
         } else if (filterIndex == 1) {
+            // 今日任务
             if (task.startTime.date() == today) {
                 result.append(task);
             }
         } else if (filterIndex == 2) {
+            // 本月任务
             QDate d = task.startTime.date();
-            if (d.year() == today.year() && d.month() == today.month()) {
+
+            if (d.year() == today.year() &&
+                d.month() == today.month()) {
                 result.append(task);
             }
         }
     }
-    // 如果勾选“按开始时间排序”，才对显示结果排序
+
+    // 如果勾选“按开始时间排序”，则对当前显示结果排序
+    // 排序只影响界面显示，不改变文件中的存储顺序
     if (sortCheckBox_ && sortCheckBox_->isChecked()) {
         std::sort(result.begin(), result.end(),
                   [](const Task& a, const Task& b) {
@@ -181,6 +231,8 @@ void MainWindow::loadTasks()
     refreshTable(result);
 }
 
+
+// 将任务列表显示到表格
 void MainWindow::refreshTable(const QVector<Task>& tasks)
 {
     table_->setRowCount(tasks.size());
@@ -188,11 +240,20 @@ void MainWindow::refreshTable(const QVector<Task>& tasks)
     for (int row = 0; row < tasks.size(); ++row) {
         const Task& t = tasks[row];
 
-        table_->setItem(row, 0, new QTableWidgetItem(QString::number(t.id)));
-        table_->setItem(row, 1, new QTableWidgetItem(t.name));
-        table_->setItem(row, 2, new QTableWidgetItem(t.startTime.toString("yyyy-MM-dd HH:mm")));
-        table_->setItem(row, 3, new QTableWidgetItem(t.priority));
-        table_->setItem(row, 4, new QTableWidgetItem(t.category));
+        table_->setItem(row, 0,
+                        new QTableWidgetItem(QString::number(t.id)));
+
+        table_->setItem(row, 1,
+                        new QTableWidgetItem(t.name));
+
+        table_->setItem(row, 2,
+                        new QTableWidgetItem(t.startTime.toString("yyyy-MM-dd HH:mm")));
+
+        table_->setItem(row, 3,
+                        new QTableWidgetItem(t.priority));
+
+        table_->setItem(row, 4,
+                        new QTableWidgetItem(t.category));
 
         QString reminderText;
         if (t.reminderTime.isValid()) {
@@ -201,8 +262,10 @@ void MainWindow::refreshTable(const QVector<Task>& tasks)
             reminderText = "无";
         }
 
-        table_->setItem(row, 5, new QTableWidgetItem(reminderText));
+        table_->setItem(row, 5,
+                        new QTableWidgetItem(reminderText));
 
+        // 高优先级任务高亮显示
         if (t.priority == "高") {
             for (int col = 0; col < table_->columnCount(); ++col) {
                 table_->item(row, col)->setBackground(Qt::yellow);
@@ -211,6 +274,8 @@ void MainWindow::refreshTable(const QVector<Task>& tasks)
     }
 }
 
+
+// 获取当前选中任务的 ID
 int MainWindow::currentSelectedTaskId() const
 {
     int row = table_->currentRow();
@@ -228,6 +293,8 @@ int MainWindow::currentSelectedTaskId() const
     return item->text().toInt();
 }
 
+
+// 添加任务
 void MainWindow::onAddTask()
 {
     TaskDialog dlg(this);
@@ -235,6 +302,7 @@ void MainWindow::onAddTask()
     if (dlg.exec() == QDialog::Accepted) {
         Task task = dlg.getTask();
 
+        // owner 由主窗口根据当前登录用户设置
         task.owner = username_;
 
         QString errorMessage;
@@ -246,6 +314,7 @@ void MainWindow::onAddTask()
         if (taskMgr_.addTask(task)) {
             storage_.saveTasks(username_, taskMgr_);
             loadTasks();
+
             QMessageBox::information(this, "成功", "任务添加成功！");
         } else {
             QMessageBox::warning(this, "添加失败", "任务添加失败，请检查任务信息是否重复。");
@@ -253,6 +322,8 @@ void MainWindow::onAddTask()
     }
 }
 
+
+// 编辑任务
 void MainWindow::onEditTask()
 {
     int taskId = currentSelectedTaskId();
@@ -286,33 +357,37 @@ void MainWindow::onEditTask()
     if (dlg.exec() == QDialog::Accepted) {
         Task newTask = dlg.getTask();
 
-	newTask.id = oldTask.id;
-	newTask.owner = username_;
+        // 编辑任务时保持原来的 ID 和 owner
+        newTask.id = oldTask.id;
+        newTask.owner = username_;
 
-	QString errorMessage;
-	if (!validateTaskForUi(newTask, oldTask.id, errorMessage)) {
-	    QMessageBox::warning(this, "修改失败", errorMessage);
-	    return;
-	}
+        QString errorMessage;
+        if (!validateTaskForUi(newTask, oldTask.id, errorMessage)) {
+            QMessageBox::warning(this, "修改失败", errorMessage);
+            return;
+        }
 
-	taskMgr_.deleteTask(oldTask.id);
+        // 当前 TaskManager 没有 updateTask，因此用先删后加的方式更新
+        taskMgr_.deleteTask(oldTask.id);
 
-	if (!taskMgr_.addTask(newTask)) {
-	    taskMgr_.addTask(oldTask);
-	    QMessageBox::warning(this, "修改失败", "任务修改失败，请检查任务信息。");
-	    return;
-	}
-	
-	remindedTaskIds_.remove(oldTask.id);    // 若一个任务已经提醒过，编辑了新的提醒时间，后续还能再次提醒
+        if (!taskMgr_.addTask(newTask)) {
+            // 如果修改失败，恢复旧任务
+            taskMgr_.addTask(oldTask);
 
-	// 每次编辑完成后，立即保存到文件
-	storage_.saveTasks(username_, taskMgr_);
-	
-	loadTasks();
-	}
+            QMessageBox::warning(this, "修改失败", "任务修改失败，请检查任务信息。");
+            return;
+        }
+
+        // 如果任务之前已经提醒过，编辑后允许再次提醒
+        remindedTaskIds_.remove(oldTask.id);
+
+        storage_.saveTasks(username_, taskMgr_);
+        loadTasks();
     }
+}
 
 
+// 删除任务
 void MainWindow::onDeleteTask()
 {
     int taskId = currentSelectedTaskId();
@@ -322,16 +397,17 @@ void MainWindow::onDeleteTask()
         return;
     }
 
-    int ret = QMessageBox::question(this, "确认删除", "确定要删除这个任务吗？");
+    int ret = QMessageBox::question(
+        this,
+        "确认删除",
+        "确定要删除这个任务吗？"
+    );
 
     if (ret == QMessageBox::Yes) {
         if (taskMgr_.deleteTask(taskId)) {
+            remindedTaskIds_.remove(taskId);
 
-	remindedTaskIds_.remove(taskId);
-	
-            // 每次删除完成后，立即保存到文件
             storage_.saveTasks(username_, taskMgr_);
-
             loadTasks();
         } else {
             QMessageBox::warning(this, "删除失败", "没有找到该任务。");
@@ -339,16 +415,22 @@ void MainWindow::onDeleteTask()
     }
 }
 
+
+// 刷新任务列表
 void MainWindow::onRefresh()
 {
     loadTasks();
 }
 
+
+// 筛选条件或排序选项变化
 void MainWindow::onFilterChanged()
 {
     loadTasks();
 }
 
+
+// 检查任务提醒
 void MainWindow::checkReminders()
 {
     QVector<Task> tasks = taskMgr_.getTasksByUser(username_);
@@ -369,7 +451,7 @@ void MainWindow::checkReminders()
         if (task.reminderTime <= now) {
             remindedTaskIds_.insert(task.id);
 
-            // 控制台打印提醒，满足“屏幕打印提醒”
+            // 控制台打印提醒
             qDebug() << "任务提醒："
                      << "任务名称:" << task.name
                      << "开始时间:" << task.startTime.toString("yyyy-MM-dd HH:mm")
@@ -377,7 +459,8 @@ void MainWindow::checkReminders()
                      << "优先级:" << task.priority
                      << "分类:" << task.category;
 
-	    playReminderSound();
+            // 播放提醒音效
+            playReminderSound();
 
             // 弹窗提醒
             QMessageBox::information(
@@ -394,25 +477,26 @@ void MainWindow::checkReminders()
     }
 }
 
+
+// 退出登录
 void MainWindow::onLogout()
 {
-    auto reply = QMessageBox::question(
+    int ret = QMessageBox::question(
         this,
         "退出登录",
-        "确定要退出当前用户并返回登录界面吗？",
-        QMessageBox::Yes | QMessageBox::No
+        "确定要退出当前用户吗？"
     );
 
-    if (reply == QMessageBox::Yes) {
+    if (ret == QMessageBox::Yes) {
         storage_.saveTasks(username_, taskMgr_);
-
-        // 通知 main.cpp：用户选择了注销
+	// 发出信号，通知 main.cpp 重新显示登录窗口
         emit logoutRequested();
-
         close();
     }
 }
 
+
+// 关于窗口
 void MainWindow::onAbout()
 {
     QMessageBox::about(
@@ -424,20 +508,27 @@ void MainWindow::onAbout()
         "- 本地文件保存任务\n"
         "- 添加、编辑、删除任务\n"
         "- 今日任务 / 本月任务筛选\n"
-        "- 任务提醒"
+        "- 可选按开始时间排序\n"
+        "- 后台任务提醒\n"
+        "- 音乐提醒\n"
+        "- 语音录入任务"
     );
 }
 
+
+// 窗口关闭事件
 void MainWindow::closeEvent(QCloseEvent* event)
 {
     storage_.saveTasks(username_, taskMgr_);
     stopReminderThread();
+
     event->accept();
 }
 
+
+// 启动后台提醒线程
 void MainWindow::startReminderThread()
 {
-    // 防止重复启动线程
     if (running_) {
         return;
     }
@@ -456,10 +547,8 @@ void MainWindow::startReminderThread()
                 break;
             }
 
-            // 注意：
-            // 后台线程不能直接操作 Qt 界面。
-            // QMessageBox 必须在主线程中弹出。
-            // 所以这里把 checkReminders 投递回 Qt 主线程执行。
+            // 后台线程不能直接操作 Qt UI
+            // 因此投递到主线程中执行 checkReminders()
             QMetaObject::invokeMethod(
                 this,
                 "checkReminders",
@@ -469,29 +558,43 @@ void MainWindow::startReminderThread()
     });
 }
 
+
+// 停止后台提醒线程
 void MainWindow::stopReminderThread()
 {
-    // 通知线程停止
     running_ = false;
 
-    // 等待线程结束
     if (reminderThread_.joinable()) {
         reminderThread_.join();
     }
 }
 
+
+// 播放任务提醒声音
 void MainWindow::playReminderSound()
 {
     if (reminderSound_ && reminderSound_->source().isValid()) {
-	qDebug() << "播放提醒音效";
+        qDebug() << "播放提醒音效";
+	// 防止上一次音效还没结束时再次叠加播放
+        if (reminderSound_->isPlaying()) {
+            reminderSound_->stop();
+        }
+        // 明确设置只播放一次
+        reminderSound_->setLoopCount(1);
+        // 播放一次提醒音效
         reminderSound_->play();
     } else {
-        // 如果没有找到音频文件，就使用系统提示音兜底
+        // 如果音频文件加载失败，使用系统蜂鸣声兜底
         QApplication::beep();
     }
 }
 
-bool MainWindow::validateTaskForUi(const Task& task, int ignoreTaskId, QString& errorMessage) const
+
+// GUI 层任务校验
+// ignoreTaskId 用于编辑任务时忽略当前任务自身
+bool MainWindow::validateTaskForUi(const Task& task,
+                                   int ignoreTaskId,
+                                   QString& errorMessage) const
 {
     if (task.name.trimmed().isEmpty()) {
         errorMessage = "任务名称不能为空！";
@@ -505,18 +608,23 @@ bool MainWindow::validateTaskForUi(const Task& task, int ignoreTaskId, QString& 
 
     QVector<Task> tasks = taskMgr_.getTasksByUser(username_);
 
+    // 新任务开始时间按分钟比较
+    QString newStart =
+        task.startTime.toString("yyyy-MM-dd HH:mm");
+
     for (const Task& existingTask : tasks) {
         // 编辑任务时，跳过当前任务自身
         if (existingTask.id == ignoreTaskId) {
             continue;
         }
 
-	QString existingStart = existingTask.startTime.toString("yyyy-MM-dd HH:mm");
-	QString newStart = task.startTime.toString("yyyy-MM-dd HH:mm");
+        QString existingStart =
+            existingTask.startTime.toString("yyyy-MM-dd HH:mm");
+
         // 规则 1：同一用户下，开始时间不能重复
         if (existingStart == newStart) {
             errorMessage = QString("已有任务使用相同开始时间：%1")
-                .arg(task.startTime.toString("yyyy-MM-dd HH:mm"));
+                .arg(newStart);
             return false;
         }
 
