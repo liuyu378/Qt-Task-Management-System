@@ -8,6 +8,7 @@ class QLineEdit;
 class QDateTimeEdit;
 class QComboBox;
 class QPushButton;
+class QCheckBox;
 class TaskDialog : public QDialog
 {
     Q_OBJECT
@@ -27,6 +28,7 @@ private:
     QDateTimeEdit* startTimeEdit_;
     QComboBox* priorityBox_;
     QComboBox* categoryBox_;
+    QCheckBox* reminderCheckBox_;   //是否启用提醒
     QDateTimeEdit* reminderTimeEdit_;
     
     QPushButton* voiceButton_;   //语音录入按钮

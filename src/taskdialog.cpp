@@ -11,6 +11,7 @@
 #include <QProcess>
 #include <QMessageBox>
 #include <QRegularExpression>
+#include <QCheckBox>
 
 // 构造函数
 // 创建任务名称、开始时间、优先级、分类、提醒时间等
@@ -41,11 +42,20 @@ TaskDialog::TaskDialog(QWidget* parent)
     categoryBox_->addItem("其他");
     categoryBox_->setCurrentText("生活");
 
+    // 是否启用提醒
+    reminderCheckBox_ = new QCheckBox("启用提醒", this);
+    reminderCheckBox_->setChecked(false);
+
     reminderTimeEdit_ = new QDateTimeEdit(this);
     reminderTimeEdit_->setCalendarPopup(true);
     reminderTimeEdit_->setDisplayFormat("yyyy-MM-dd HH:mm");
     reminderTimeEdit_->setDateTime(QDateTime::currentDateTime());
     
+    reminderTimeEdit_->setEnabled(false);
+    // 勾选“启用提醒”后，提醒时间控件才可编辑
+    connect(reminderCheckBox_, &QCheckBox::toggled,
+        reminderTimeEdit_, &QDateTimeEdit::setEnabled);
+
     voiceButton_ = new QPushButton("语音录入",this);
     QPushButton* okButton = new QPushButton("确定", this);
     QPushButton* cancelButton = new QPushButton("取消", this);
@@ -55,6 +65,7 @@ TaskDialog::TaskDialog(QWidget* parent)
     formLayout->addRow("开始时间：", startTimeEdit_);
     formLayout->addRow("优先级：", priorityBox_);
     formLayout->addRow("分类：", categoryBox_);
+    formLayout->addRow("",reminderCheckBox_);
     formLayout->addRow("提醒时间：", reminderTimeEdit_);
 
     QHBoxLayout* buttonLayout = new QHBoxLayout;
@@ -83,7 +94,16 @@ void TaskDialog::setTask(const Task& task)
     startTimeEdit_->setDateTime(task.startTime);
     priorityBox_->setCurrentText(task.priority);
     categoryBox_->setCurrentText(task.category);
+ 
+    if (task.reminderTime.isValid()) {
+    reminderCheckBox_->setChecked(true);
+    reminderTimeEdit_->setEnabled(true);
     reminderTimeEdit_->setDateTime(task.reminderTime);
+} else {
+    reminderCheckBox_->setChecked(false);
+    reminderTimeEdit_->setEnabled(false);
+    reminderTimeEdit_->setDateTime(QDateTime::currentDateTime());
+}
 }
 
 // 从对话框控件中读取用户输入，组装成 Task 对象
@@ -112,7 +132,20 @@ Task TaskDialog::getTask() const
                        reminderDateTime.time().minute(),
                        0);
     reminderDateTime.setTime(reminderTime);
+ 
+    if (reminderCheckBox_->isChecked()) {
+    QDateTime reminderDateTime = reminderTimeEdit_->dateTime();
+
+    QTime reminderTime(reminderDateTime.time().hour(),
+                       reminderDateTime.time().minute(),
+                       0);
+
+    reminderDateTime.setTime(reminderTime);
     task.reminderTime = reminderDateTime;
+} else {
+    // 无效 QDateTime 表示无提醒
+    task.reminderTime = QDateTime();
+}
 
     return task;
 }
