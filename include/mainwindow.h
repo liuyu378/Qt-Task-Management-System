@@ -16,6 +16,7 @@ class QPushButton;
 class QComboBox;
 class QLabel;
 class QSoundEffect;
+class QCheckBox;
 
 class MainWindow : public QMainWindow
 {
@@ -66,8 +67,9 @@ private:
     QPushButton* logoutButton_;
     QPushButton* aboutButton_;
     QComboBox* filterBox_;
+    QCheckBox* sortCheckBox_;
     QLabel* userLabel_;
-
+    
     // 后台提醒线程
     std::thread reminderThread_;
 

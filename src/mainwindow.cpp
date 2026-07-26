@@ -23,6 +23,8 @@
 #include <QUrl>
 #include <QFileInfo>
 #include <QApplication>
+#include <QCheckBox>
+#include <algorithm>
 
 MainWindow::MainWindow(const QString& username, QWidget* parent)
     : QMainWindow(parent),
@@ -35,6 +37,7 @@ MainWindow::MainWindow(const QString& username, QWidget* parent)
       logoutButton_(nullptr),
       aboutButton_(nullptr),
       filterBox_(nullptr),
+      sortCheckBox_(nullptr),
       userLabel_(nullptr),
       reminderSound_(nullptr),
       running_(false)
@@ -91,6 +94,8 @@ void MainWindow::setupUiExtra()
     filterBox_->addItem("全部任务");
     filterBox_->addItem("今日任务");
     filterBox_->addItem("本月任务");
+    sortCheckBox_ = new QCheckBox("按开始时间排序", this);
+    sortCheckBox_->setChecked(false);   // 默认不排序，保持添加顺序
 
     addButton_ = new QPushButton("添加任务", this);
     editButton_ = new QPushButton("编辑任务", this);
@@ -117,6 +122,7 @@ void MainWindow::setupUiExtra()
     topLayout->addStretch();
     topLayout->addWidget(new QLabel("筛选：", this));
     topLayout->addWidget(filterBox_);
+    topLayout->addWidget(sortCheckBox_);
 
     QHBoxLayout* buttonLayout = new QHBoxLayout;
     buttonLayout->addWidget(addButton_);
@@ -138,13 +144,8 @@ void MainWindow::setupUiExtra()
     connect(refreshButton_, &QPushButton::clicked, this, &MainWindow::onRefresh);
     connect(logoutButton_, &QPushButton::clicked, this, &MainWindow::onLogout);
     connect(aboutButton_, &QPushButton::clicked, this, &MainWindow::onAbout);
-
-    connect(
-        filterBox_,
-        &QComboBox::currentIndexChanged,
-        this,
-        &MainWindow::onFilterChanged
-    );
+    connect(sortCheckBox_, &QCheckBox::toggled,this, &MainWindow::onFilterChanged);
+    connect(filterBox_,&QComboBox::currentIndexChanged,this,&MainWindow::onFilterChanged);
 }
 
 void MainWindow::loadTasks()
@@ -168,6 +169,13 @@ void MainWindow::loadTasks()
                 result.append(task);
             }
         }
+    }
+    // 如果勾选“按开始时间排序”，才对显示结果排序
+    if (sortCheckBox_ && sortCheckBox_->isChecked()) {
+        std::sort(result.begin(), result.end(),
+                  [](const Task& a, const Task& b) {
+                      return a.startTime < b.startTime;
+                  });
     }
 
     refreshTable(result);
