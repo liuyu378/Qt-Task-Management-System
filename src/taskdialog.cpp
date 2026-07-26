@@ -1,20 +1,19 @@
 #include "taskdialog.h"
 
-#include <QLineEdit>
-#include <QDateTimeEdit>
-#include <QComboBox>
-#include <QPushButton>
-#include <QFormLayout>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QDateTime>
-#include <QProcess>
-#include <QMessageBox>
-#include <QRegularExpression>
 #include <QCheckBox>
+#include <QComboBox>
+#include <QDateTime>
+#include <QDateTimeEdit>
+#include <QFormLayout>
+#include <QHBoxLayout>
+#include <QLineEdit>
+#include <QMessageBox>
+#include <QProcess>
+#include <QPushButton>
+#include <QRegularExpression>
+#include <QVBoxLayout>
 
-// 构造函数
-// 创建任务名称、开始时间、优先级、分类、提醒时间等
+// 任务编辑对话框构造函数：创建输入控件，设置默认值，并连接按钮与相关事件
 TaskDialog::TaskDialog(QWidget* parent)
     : QDialog(parent),
       taskId_(0)
@@ -50,13 +49,13 @@ TaskDialog::TaskDialog(QWidget* parent)
     reminderTimeEdit_->setCalendarPopup(true);
     reminderTimeEdit_->setDisplayFormat("yyyy-MM-dd HH:mm");
     reminderTimeEdit_->setDateTime(QDateTime::currentDateTime());
-    
     reminderTimeEdit_->setEnabled(false);
+
     // 勾选“启用提醒”后，提醒时间控件才可编辑
     connect(reminderCheckBox_, &QCheckBox::toggled,
-        reminderTimeEdit_, &QDateTimeEdit::setEnabled);
+            reminderTimeEdit_, &QDateTimeEdit::setEnabled);
 
-    voiceButton_ = new QPushButton("语音录入",this);
+    voiceButton_ = new QPushButton("语音录入", this);
     QPushButton* okButton = new QPushButton("确定", this);
     QPushButton* cancelButton = new QPushButton("取消", this);
 
@@ -65,7 +64,7 @@ TaskDialog::TaskDialog(QWidget* parent)
     formLayout->addRow("开始时间：", startTimeEdit_);
     formLayout->addRow("优先级：", priorityBox_);
     formLayout->addRow("分类：", categoryBox_);
-    formLayout->addRow("",reminderCheckBox_);
+    formLayout->addRow("", reminderCheckBox_);
     formLayout->addRow("提醒时间：", reminderTimeEdit_);
 
     QHBoxLayout* buttonLayout = new QHBoxLayout;
@@ -77,14 +76,13 @@ TaskDialog::TaskDialog(QWidget* parent)
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->addLayout(formLayout);
     mainLayout->addLayout(buttonLayout);
-    
-    connect(voiceButton_,&QPushButton::clicked,this,&TaskDialog::onVoiceInput);
+
+    connect(voiceButton_, &QPushButton::clicked, this, &TaskDialog::onVoiceInput);
     connect(okButton, &QPushButton::clicked, this, &TaskDialog::onAcceptClicked);
     connect(cancelButton, &QPushButton::clicked, this, &QDialog::reject);
 }
 
-// 将已有任务信息填入对话框
-// 用于编辑任务时显示原任务内容
+// 将已有任务信息填入对话框：编辑任务时，先把旧数据回填到界面控件，方便用户修改
 void TaskDialog::setTask(const Task& task)
 {
     taskId_ = task.id;
@@ -94,19 +92,19 @@ void TaskDialog::setTask(const Task& task)
     startTimeEdit_->setDateTime(task.startTime);
     priorityBox_->setCurrentText(task.priority);
     categoryBox_->setCurrentText(task.category);
- 
+
     if (task.reminderTime.isValid()) {
-    reminderCheckBox_->setChecked(true);
-    reminderTimeEdit_->setEnabled(true);
-    reminderTimeEdit_->setDateTime(task.reminderTime);
-} else {
-    reminderCheckBox_->setChecked(false);
-    reminderTimeEdit_->setEnabled(false);
-    reminderTimeEdit_->setDateTime(QDateTime::currentDateTime());
-}
+        reminderCheckBox_->setChecked(true);
+        reminderTimeEdit_->setEnabled(true);
+        reminderTimeEdit_->setDateTime(task.reminderTime);
+    } else {
+        reminderCheckBox_->setChecked(false);
+        reminderTimeEdit_->setEnabled(false);
+        reminderTimeEdit_->setDateTime(QDateTime::currentDateTime());
+    }
 }
 
-// 从对话框控件中读取用户输入，组装成 Task 对象
+// 从对话框控件中读取用户输入，组装成 Task 对象，供主窗口保存或更新任务
 Task TaskDialog::getTask() const
 {
     Task task;
@@ -129,28 +127,21 @@ Task TaskDialog::getTask() const
     // 提醒时间也统一精确到分钟
     QDateTime reminderDateTime = reminderTimeEdit_->dateTime();
     QTime reminderTime(reminderDateTime.time().hour(),
-                       reminderDateTime.time().minute(),
-                       0);
+                        reminderDateTime.time().minute(),
+                        0);
     reminderDateTime.setTime(reminderTime);
- 
+
     if (reminderCheckBox_->isChecked()) {
-    QDateTime reminderDateTime = reminderTimeEdit_->dateTime();
-
-    QTime reminderTime(reminderDateTime.time().hour(),
-                       reminderDateTime.time().minute(),
-                       0);
-
-    reminderDateTime.setTime(reminderTime);
-    task.reminderTime = reminderDateTime;
-} else {
-    // 无效 QDateTime 表示无提醒
-    task.reminderTime = QDateTime();
-}
+        task.reminderTime = reminderDateTime;
+    } else {
+        // 无效 QDateTime 表示无提醒
+        task.reminderTime = QDateTime();
+    }
 
     return task;
 }
 
-// 语音识别函数
+// 语音识别函数：调用外部脚本识别用户语音，将识别结果用于自动填充任务名称和时间
 void TaskDialog::onVoiceInput()
 {
     voiceButton_->setEnabled(false);
@@ -195,6 +186,7 @@ void TaskDialog::onVoiceInput()
     applyVoiceText(text);
 }
 
+// 解析语音文本：根据中文关键词识别日期、时间、任务名称和类别，自动填入界面字段
 void TaskDialog::applyVoiceText(const QString& text)
 {
     QString taskName = text;
@@ -211,18 +203,31 @@ void TaskDialog::applyVoiceText(const QString& text)
     // 解析小时
     int hour = -1;
 
-    if (text.contains("十一点")) hour = 11;
-    else if (text.contains("十二点")) hour = 12;
-    else if (text.contains("三点")) hour = 3;
-    else if (text.contains("四点")) hour = 4;
-    else if (text.contains("五点")) hour = 5;
-    else if (text.contains("六点")) hour = 6;
-    else if (text.contains("七点")) hour = 7;
-    else if (text.contains("八点")) hour = 8;
-    else if (text.contains("九点")) hour = 9;
-    else if (text.contains("十点")) hour = 10;
-    else if (text.contains("一点")) hour = 1;
-    else if (text.contains("两点") || text.contains("二点")) hour = 2;
+    if (text.contains("十一点")) {
+        hour = 11;
+    } else if (text.contains("十二点")) {
+        hour = 12;
+    } else if (text.contains("三点")) {
+        hour = 3;
+    } else if (text.contains("四点")) {
+        hour = 4;
+    } else if (text.contains("五点")) {
+        hour = 5;
+    } else if (text.contains("六点")) {
+        hour = 6;
+    } else if (text.contains("七点")) {
+        hour = 7;
+    } else if (text.contains("八点")) {
+        hour = 8;
+    } else if (text.contains("九点")) {
+        hour = 9;
+    } else if (text.contains("十点")) {
+        hour = 10;
+    } else if (text.contains("一点")) {
+        hour = 1;
+    } else if (text.contains("两点") || text.contains("二点")) {
+        hour = 2;
+    }
 
     // 下午 / 晚上自动加 12 小时
     if (hour > 0 && (text.contains("下午") || text.contains("晚上"))) {
@@ -286,6 +291,7 @@ void TaskDialog::applyVoiceText(const QString& text)
     }
 }
 
+// 确定按钮点击处理：检查任务名和时间是否合法，合法后关闭对话框并返回确认结果
 void TaskDialog::onAcceptClicked()
 {
     QString taskName = nameEdit_->text().trimmed();

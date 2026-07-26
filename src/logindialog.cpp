@@ -3,6 +3,7 @@
 
 #include <QMessageBox>
 
+// 登录窗口构造函数：初始化界面、加载已有用户数据，并设置窗口标题与尺寸
 LoginDialog::LoginDialog(QWidget* parent)
     : QDialog(parent)
     , ui(new Ui::LoginDialog)
@@ -21,11 +22,13 @@ LoginDialog::~LoginDialog()
     delete ui;
 }
 
+// 返回当前已登录的用户名，供主窗口使用
 QString LoginDialog::username() const
 {
     return username_;
 }
 
+// 登录按钮点击处理：读取输入内容，检查用户名和密码是否有效；若用户不存在则询问是否注册
 void LoginDialog::on_loginBtn_clicked()
 {
     QString user = ui->usernameEdit->text().trimmed();
@@ -66,6 +69,7 @@ void LoginDialog::on_loginBtn_clicked()
     }
 }
 
+// 注册按钮点击处理：把新用户写入用户管理器，并保存到磁盘，随后直接进入登录状态
 void LoginDialog::on_registerBtn_clicked()
 {
     QString user = ui->usernameEdit->text().trimmed();

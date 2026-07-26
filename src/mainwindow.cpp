@@ -450,6 +450,9 @@ void MainWindow::checkReminders()
         // 到达提醒时间
         if (task.reminderTime <= now) {
             remindedTaskIds_.insert(task.id);
+        if (task.startTime < now) {
+            continue;
+            }
 
             // 控制台打印提醒
             qDebug() << "任务提醒："

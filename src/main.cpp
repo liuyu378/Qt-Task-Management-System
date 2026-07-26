@@ -5,6 +5,7 @@
 #include "logindialog.h"
 #include "mainwindow.h"
 
+// 程序主入口：先创建登录窗口，用户登录成功后再进入主界面；用户注销或关闭时可重新进入登录流程
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
