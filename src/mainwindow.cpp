@@ -183,7 +183,7 @@ void MainWindow::setupUiExtra()
     connect(filterBox_,
             QOverload<int>::of(&QComboBox::currentIndexChanged),
             this,
-            &MainWindow::onFilterChanged);
+            &MainWindow::onFilterChanged);   // 筛选条件变化时刷新任务列表,并且取int类型
 
     connect(sortCheckBox_, &QCheckBox::toggled,
             this, &MainWindow::onFilterChanged);

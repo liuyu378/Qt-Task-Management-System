@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
         bool logout = false;
 
         MainWindow* mainWindow = new MainWindow(loginDialog.username());
-        mainWindow->setAttribute(Qt::WA_DeleteOnClose);
+        mainWindow->setAttribute(Qt::WA_DeleteOnClose);   // 窗口关闭时，Qt自动删除 MainWindow 对象，避免内存泄漏
 
         // 如果主窗口发出 logoutRequested，说明用户选择返回登录界面
         QObject::connect(mainWindow, &MainWindow::logoutRequested,
