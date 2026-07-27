@@ -352,7 +352,7 @@ void MainWindow::onEditTask()
     }
 
     TaskDialog dlg(this);
-    dlg.setTask(oldTask);
+    dlg.setTask(oldTask);      // 将旧任务信息填入对话框，方便用户修改
 
     if (dlg.exec() == QDialog::Accepted) {
         Task newTask = dlg.getTask();
@@ -362,7 +362,7 @@ void MainWindow::onEditTask()
         newTask.owner = username_;
 
         QString errorMessage;
-        if (!validateTaskForUi(newTask, oldTask.id, errorMessage)) {
+        if (!validateTaskForUi(newTask, oldTask.id, errorMessage)) {    // GUI层校验
             QMessageBox::warning(this, "修改失败", errorMessage);
             return;
         }
