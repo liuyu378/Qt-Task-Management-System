@@ -367,7 +367,7 @@ void MainWindow::onEditTask()
             return;
         }
 
-        // 当前 TaskManager 没有 updateTask，因此用先删后加的方式更新
+        // 用先删后加的方式更新
         taskMgr_.deleteTask(oldTask.id);
 
         if (!taskMgr_.addTask(newTask)) {
