@@ -23,6 +23,8 @@
 #include <QFileInfo>
 #include <QApplication>
 
+#include <QMutexLocker>
+
 #include <chrono>
 #include <thread>
 #include <algorithm>
@@ -193,7 +195,13 @@ void MainWindow::setupUiExtra()
 // 根据筛选条件刷新任务列表
 void MainWindow::loadTasks()
 {
-    QVector<Task> allTasks = taskMgr_.getTasksByUser(username_);
+    // 加锁复制任务列表，然后释放锁，在锁外进行筛选排序和界面刷新
+    QVector<Task> allTasks;
+    {
+        QMutexLocker locker(&taskMutex_);
+        allTasks = taskMgr_.getTasksByUser(username_);
+    }
+
     QVector<Task> result;
 
     int filterIndex = filterBox_ ? filterBox_->currentIndex() : 0;
@@ -305,16 +313,24 @@ void MainWindow::onAddTask()
         // owner 由主窗口根据当前登录用户设置
         task.owner = username_;
 
+        // GUI 层校验（在锁外完成，不访问共享数据）
         QString errorMessage;
         if (!validateTaskForUi(task, -1, errorMessage)) {
             QMessageBox::warning(this, "添加失败", errorMessage);
             return;
         }
 
-        if (taskMgr_.addTask(task)) {
-            storage_.saveTasks(username_, taskMgr_);
-            loadTasks();
+        bool success = false;
+        {
+            QMutexLocker locker(&taskMutex_);
+            if (taskMgr_.addTask(task)) {
+                storage_.saveTasks(username_, taskMgr_);
+                success = true;
+            }
+        }
 
+        if (success) {
+            loadTasks();
             QMessageBox::information(this, "成功", "任务添加成功！");
         } else {
             QMessageBox::warning(this, "添加失败", "任务添加失败，请检查任务信息是否重复。");
@@ -333,7 +349,12 @@ void MainWindow::onEditTask()
         return;
     }
 
-    QVector<Task> tasks = taskMgr_.getTasksByUser(username_);
+    // 加锁复制任务列表，在本地副本中查找旧任务
+    QVector<Task> tasks;
+    {
+        QMutexLocker locker(&taskMutex_);
+        tasks = taskMgr_.getTasksByUser(username_);
+    }
 
     Task oldTask;
     bool found = false;
@@ -361,28 +382,36 @@ void MainWindow::onEditTask()
         newTask.id = oldTask.id;
         newTask.owner = username_;
 
+        // GUI 层校验（锁外完成）
         QString errorMessage;
-        if (!validateTaskForUi(newTask, oldTask.id, errorMessage)) {    // GUI层校验
+        if (!validateTaskForUi(newTask, oldTask.id, errorMessage)) {
             QMessageBox::warning(this, "修改失败", errorMessage);
             return;
         }
 
-        // 用先删后加的方式更新
-        taskMgr_.deleteTask(oldTask.id);
+        bool success = false;
+        {
+            QMutexLocker locker(&taskMutex_);
 
-        if (!taskMgr_.addTask(newTask)) {
-            // 如果修改失败，恢复旧任务
-            taskMgr_.addTask(oldTask);
+            // 用先删后加的方式更新
+            taskMgr_.deleteTask(oldTask.id);
 
-            QMessageBox::warning(this, "修改失败", "任务修改失败，请检查任务信息。");
-            return;
+            if (!taskMgr_.addTask(newTask)) {
+                // 如果修改失败，恢复旧任务
+                taskMgr_.addTask(oldTask);
+            } else {
+                success = true;
+                // 如果任务之前已经提醒过，编辑后允许再次提醒
+                remindedTaskIds_.remove(oldTask.id);
+                storage_.saveTasks(username_, taskMgr_);
+            }
         }
 
-        // 如果任务之前已经提醒过，编辑后允许再次提醒
-        remindedTaskIds_.remove(oldTask.id);
-
-        storage_.saveTasks(username_, taskMgr_);
-        loadTasks();
+        if (success) {
+            loadTasks();
+        } else {
+            QMessageBox::warning(this, "修改失败", "任务修改失败，请检查任务信息。");
+        }
     }
 }
 
@@ -404,10 +433,17 @@ void MainWindow::onDeleteTask()
     );
 
     if (ret == QMessageBox::Yes) {
-        if (taskMgr_.deleteTask(taskId)) {
-            remindedTaskIds_.remove(taskId);
+        bool success = false;
+        {
+            QMutexLocker locker(&taskMutex_);
+            if (taskMgr_.deleteTask(taskId)) {
+                remindedTaskIds_.remove(taskId);
+                storage_.saveTasks(username_, taskMgr_);
+                success = true;
+            }
+        }
 
-            storage_.saveTasks(username_, taskMgr_);
+        if (success) {
             loadTasks();
         } else {
             QMessageBox::warning(this, "删除失败", "没有找到该任务。");
@@ -433,7 +469,13 @@ void MainWindow::onFilterChanged()
 // 检查任务提醒
 void MainWindow::checkReminders()
 {
-    QVector<Task> tasks = taskMgr_.getTasksByUser(username_);
+    // 加锁复制当前用户任务列表，释放锁后在锁外遍历
+    QVector<Task> tasks;
+    {
+        QMutexLocker locker(&taskMutex_);
+        tasks = taskMgr_.getTasksByUser(username_);
+    }
+
     QDateTime now = QDateTime::currentDateTime();
 
     for (const Task& task : tasks) {
@@ -442,16 +484,26 @@ void MainWindow::checkReminders()
             continue;
         }
 
-        // 已经提醒过的任务不重复提醒
-        if (remindedTaskIds_.contains(task.id)) {
-            continue;
-        }
-
         // 到达提醒时间
         if (task.reminderTime <= now) {
-            remindedTaskIds_.insert(task.id);
-        if (task.startTime < now) {
-            continue;
+            bool shouldRemind = false;
+            {
+                QMutexLocker locker(&taskMutex_);
+
+                // 已经提醒过的任务不重复提醒
+                if (!remindedTaskIds_.contains(task.id)) {
+                    remindedTaskIds_.insert(task.id);
+                    shouldRemind = true;
+                }
+            }
+
+            if (!shouldRemind) {
+                continue;
+            }
+
+            // 已过开始时间的任务不再提醒
+            if (task.startTime < now) {
+                continue;
             }
 
             // 控制台打印提醒
@@ -462,10 +514,10 @@ void MainWindow::checkReminders()
                      << "优先级:" << task.priority
                      << "分类:" << task.category;
 
-            // 播放提醒音效
+            // 播放提醒音效（锁外）
             playReminderSound();
 
-            // 弹窗提醒
+            // 弹窗提醒（锁外）
             QMessageBox::information(
                 this,
                 "任务提醒",
@@ -491,8 +543,11 @@ void MainWindow::onLogout()
     );
 
     if (ret == QMessageBox::Yes) {
-        storage_.saveTasks(username_, taskMgr_);
-	// 发出信号，通知 main.cpp 重新显示登录窗口
+        {
+            QMutexLocker locker(&taskMutex_);
+            storage_.saveTasks(username_, taskMgr_);
+        }
+        // 发出信号，通知 main.cpp 重新显示登录窗口
         emit logoutRequested();
         close();
     }
@@ -522,8 +577,13 @@ void MainWindow::onAbout()
 // 窗口关闭事件
 void MainWindow::closeEvent(QCloseEvent* event)
 {
-    storage_.saveTasks(username_, taskMgr_);
+    // 先停止后台线程（防止它在保存时同时访问 taskMgr_）
     stopReminderThread();
+
+    {
+        QMutexLocker locker(&taskMutex_);
+        storage_.saveTasks(username_, taskMgr_);
+    }
 
     event->accept();
 }
@@ -609,7 +669,12 @@ bool MainWindow::validateTaskForUi(const Task& task,
         return false;
     }
 
-    QVector<Task> tasks = taskMgr_.getTasksByUser(username_);
+    // 加锁复制任务列表，在锁外进行校验比较
+    QVector<Task> tasks;
+    {
+        QMutexLocker locker(&taskMutex_);
+        tasks = taskMgr_.getTasksByUser(username_);
+    }
 
     // 新任务开始时间按分钟比较
     QString newStart =

@@ -6,6 +6,7 @@
 #include <QVector>
 #include <QSet>
 #include <QCheckBox>
+#include <QMutex>
 
 #include <thread>
 #include <atomic>
@@ -132,6 +133,9 @@ private:
 
     // 提醒音效对象
     QSoundEffect* reminderSound_;
+
+    // 互斥锁，保护 taskMgr_ 和 remindedTaskIds_ 的并发访问
+    mutable QMutex taskMutex_;
 };
 
 #endif // MAINWINDOW_H
